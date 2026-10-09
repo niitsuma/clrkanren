@@ -97,7 +97,22 @@ The answers below are written the way Racket prints them. SBCL prints
     (`(,a ,b) (== out `(,b ,a)))))
 (run* (q) (swapo '(1 2) q))
 ;; => ((2 1))
+
+;; repetition: h ___ matches any number of elements, and a variable
+;; under it collects what it matched in each
+(run* (q)
+  (matchee '((1 (2 3)) (10 (2 30)) (100 (2 300)))
+    (`((,a (2 ,b)) ___) (== q `(,a ,b)))))
+;; => (((1 10 100) (3 30 300)))
+
+(run* (q) (matchee '(1 2 3) (`(,x ___ . ,r) (== q `(,x ,r)))))
+;; => ((() (1 2 3)) ((1) (2 3)) ((1 2) (3)) ((1 2 3) ()))
 ```
+
+`matchee` is matche with `___` (where `syntax-rules` would write `...`).
+`(h ___ . tail)` matches a list whose prefix is made of elements that each
+match `h`, followed by a rest that matches `tail`. A `___` can be nested
+inside `h`, and a list can contain more than one `___`.
 
 ## Coming from the Scheme version
 
@@ -123,8 +138,8 @@ Some other points:
   set it.
 - **`symbolo`.** `nil` and `t` aren't symbols for `symbolo`, matching `'()`
   and `#t` in Scheme.
-- **`matche` and SBCL.** `matche` reads unquoted variables out of SBCL's
-  backquote representation, so it needs SBCL. The rest of the library is
+- **`matche`/`matchee` and SBCL.** Both macros read unquoted variables out
+  of SBCL's backquote representation, so they need SBCL. The rest of the library is
   portable Common Lisp.
 
 ## API
@@ -142,7 +157,7 @@ Some other points:
   `mapo`, `for-eacho`, `for-eache`, `builde`, `build2e`, `builde-nest`.
 - **Arithmetic** (Kiselyov's binary numerals): `build-num`, `pluso`,
   `minuso`, `*o`, `/o`, `<o`, `<=o`, `logo`, `expo`, …
-- **Matching:** `matche`, `lambdae`.
+- **Matching:** `matche`, `lambdae`, `matchee`.
 
 ## Tests
 

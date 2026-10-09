@@ -37,4 +37,4 @@
    #:*o #:odd-*o #:bound-*o #:=lo #:<lo #:<=lo #:<o #:<=o #:/o #:splito
    #:logo #:exp2 #:repeated-mul #:expo
    ;; pattern matching
-   #:matche #:lambdae))
+   #:matche #:lambdae #:matchee #:___))

@@ -92,6 +92,40 @@ gave, as recorded in expected.sexp."
            (run* (q) (funcall swapo '(1 2) q)))
          '((2 1))))
 
+(defun run-matchee ()
+  ;; the first three are matchee-test.scm of Racket-miniKanren (recursive
+  ;; branch), with the answers it gives under Racket
+  (check "matchee: variables under ___ collect lists"
+         (run* (q) (matchee '((1 (2 3)) (10 (2 30)) (100 (2 300)))
+                     (`((,a (2 ,b)) ___) (== q `(,a ,b)))))
+         '(((1 10 100) (3 30 300))))
+  (check "matchee without ___ is matche"
+         (run1 (q) (matchee '(1 2 3) (`(,x . ,r) (== q `(,x ,r)))))
+         '((1 (2 3))))
+  (check "matchee: every split"
+         (run* (q) (matchee '(1 2 3) (`(,x ___ . ,r) (== q `(,x ,r)))))
+         '((() (1 2 3)) ((1) (2 3)) ((1 2) (3)) ((1 2 3) ())))
+  (check "matchee: nested ___ repeats per element"
+         (run* (q) (matchee '((a 1 2) (b 3) (c))
+                     (`((,k ,v ___) ___) (== q `(,k ,v)))))
+         '(((a b c) ((1 2) (3) ()))))
+  (check "matchee: literals around ___"
+         (list (run* (q) (matchee '(x 1 2 3 y) (`(x ,n ___ y) (== q n))))
+               (run* (q) (matchee '(1 2 3) (`(,n ___ 4) (== q n)))))
+         '(((1 2 3)) ()))
+  (check "matchee: two ___ in one list"
+         (run* (q) (matchee '(a b 1 2)
+                     (`(,s ___ ,n ___)
+                      (for-eacho #'symbolo s) (for-eacho #'numbero n)
+                      (== q `(,s ,n)))))
+         '(((a b) (1 2))))
+  (check "matchee generates"
+         (run 3 (q) (matchee q (`((,a ,b) ___))))
+         '(() ((|_.0| |_.1|)) ((|_.0| |_.1|) (|_.2| |_.3|))))
+  (check "matchee literal clause"
+         (run* (q) (matchee '(5) ((5) (== q 'lit)) (`(,x ___) (== q x))))
+         '(lit (5))))
+
 (defun run-hygiene ()
   ;; the macros bind names of their own around the user's goals
   (check "variables named c and f"
@@ -183,6 +217,7 @@ gave, as recorded in expected.sexp."
         (*package* (find-package '#:clrkanren-test)))
     (run-cases)
     (run-matche)
+    (run-matchee)
     (run-hygiene)
     (run-walk)
     (run-recursive-vars)
