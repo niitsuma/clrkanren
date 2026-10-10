@@ -126,6 +126,244 @@ gave, as recorded in expected.sexp."
          (run* (q) (matchee '(5) ((5) (== q 'lit)) (`(,x ___) (== q x))))
          '(lit (5))))
 
+;;; ------------------------------------------------------------ fd
+
+;;; fdtests.scm and comptests.scm of cKanren, with the answers they give
+;;; there.  #t of tests 9 to 11 is t.
+
+(defun add-digitso (augend addend carry-in carry digit)
+  (fresh (partial-sum sum)
+    (infd partial-sum (range 0 18))
+    (infd sum (range 0 19))
+    (plusfd augend addend partial-sum)
+    (plusfd partial-sum carry-in sum)
+    (conde
+      ((<fd 9 sum) (=fd carry 1) (plusfd digit 10 sum))
+      ((<=fd sum 9) (=fd carry 0) (=fd digit sum)))))
+
+(defun send-more-moneyo (letters)
+  (fresh (s e n d m o r y carry0 carry1 carry2)
+    (== letters `(,s ,e ,n ,d ,m ,o ,r ,y))
+    (distinctfd letters)
+    (infd s m (range 1 9))
+    (infd e n d o r y (range 0 9))
+    (infd carry0 carry1 carry2 (range 0 1))
+    (add-digitso s m carry2 m o)
+    (add-digitso e o carry1 carry2 n)
+    (add-digitso n r carry0 carry1 e)
+    (add-digitso d e 0 carry0 y)))
+
+(defun diago (qi qj d rng)
+  (fresh (qi+d qj+d)
+    (infd qi+d qj+d rng)
+    (plusfd qi d qi+d)
+    (=/=fd qi+d qj)
+    (plusfd qj d qj+d)
+    (=/=fd qj+d qi)))
+
+(defun diagonalso (n l)
+  (labels ((lp (r s i j)
+             (cond
+               ((or (null r) (null (cdr r))) succeed)
+               ((null s) (lp (cdr r) (cddr r) (+ i 1) (+ i 2)))
+               (t (fresh ()
+                    (diago (car r) (car s) (- j i) (range 0 (* 2 n)))
+                    (lp r (cdr s) i (+ j 1)))))))
+    (lp l (cdr l) 0 1)))
+
+(defun n-queenso (q* n)
+  (labels ((lp (i l)
+             (if (zerop i)
+                 (fresh () (distinctfd l) (diagonalso n l) (== q* l))
+                 (fresh (x)
+                   (infd x (range 1 n))
+                   (lp (- i 1) (cons x l))))))
+    (lp n '())))
+
+(defun max-val (n)
+  (ecase n (1 9) (10 99) (100 999) (1000 9999) (10000 99999)))
+
+(defun actual-wortho (ls out)
+  (labels ((lp (ls place acc)
+             (if (null ls)
+                 (== acc out)
+                 (fresh (cur acc^)
+                   (infd acc^ (range 0 (max-val place)))
+                   (infd cur (range 0 (- (* place 10) 1)))
+                   (timesfd (car ls) place cur)
+                   (plusfd acc cur acc^)
+                   (lp (cdr ls) (* place 10) acc^)))))
+    (lp (reverse ls) 1 0)))
+
+(defun smm-mult (letters)
+  (fresh (s e n d m o r y send more money)
+    (== letters `(,s ,e ,n ,d ,m ,o ,r ,y))
+    (distinctfd letters)
+    (infd s m (range 1 9))
+    (infd e n d o r y (range 0 9))
+    (infd send more (range 0 9999))
+    (infd money (range 0 99999))
+    (actual-wortho `(,s ,e ,n ,d) send)
+    (actual-wortho `(,m ,o ,r ,e) more)
+    (actual-wortho `(,m ,o ,n ,e ,y) money)
+    (plusfd send more money)))
+
+(defun fd-distincto (l)
+  (conde
+    ((== l '()))
+    ((fresh (a) (== l `(,a))))
+    ((fresh (a ad dd)
+       (== l `(,a ,ad . ,dd))
+       (=/= a ad)
+       (fd-distincto `(,a . ,dd))
+       (fd-distincto `(,ad . ,dd))))))
+
+(defun run-fd ()
+  (check "fd 0.0" (run* (x) (infd x '(1 2))) '(1 2))
+  (check "fd 0.1" (run* (x) (fresh (y) (infd x y '(1 2)) (=fd x y))) '(1 2))
+  (check "fd 1.0" (run* (x) (infd x '(1 2)) (=/=fd x 1)) '(2))
+  (check "fd 1.1"
+         (run* (q) (fresh (x) (infd x q '(1 2)) (=/=fd x 1) (=fd x q)))
+         '(2))
+  (check "fd 2"
+         (run* (q) (fresh (x y z)
+                     (infd x '(1 2 3)) (infd y '(3 4 5)) (=fd x y)
+                     (infd z '(1 3 5 7 8)) (infd z '(5 6)) (=fd z 5)
+                     (== q `(,x ,y ,z))))
+         '((3 3 5)))
+  (check "fd 3"
+         (run* (q) (fresh (x y z)
+                     (infd x '(1 2 3)) (infd y '(3 4 5)) (=fd x y)
+                     (infd z '(1 3 5 7 8)) (infd z '(5 6)) (=fd z x)
+                     (== q `(,x ,y ,z))))
+         '())
+  (check "fd 4"
+         (run* (q) (fresh (x y z)
+                     (infd x '(1 2)) (infd y '(2 3)) (infd z q '(2 4))
+                     (=fd x y) (=/=fd x z) (=fd q z)))
+         '(4))
+  (check "fd 4.1"
+         (run* (q) (fresh (x y z)
+                     (=fd x y) (infd y '(2 3)) (=/=fd x z)
+                     (infd z q '(2 4)) (=fd q z) (infd x '(1 2))))
+         '(4))
+  (check "fd 5"
+         (run* (q) (fresh (x y)
+                     (infd x '(1 2 3)) (infd y '(0 1 2 3 4))
+                     (<fd x y) (=/=fd x 1) (=fd y 3)
+                     (== q `(,x ,y))))
+         '((2 3)))
+  (check "fd 6"
+         (run* (q) (fresh (x y)
+                     (infd x '(1 2)) (infd y '(2 3)) (=fd x y) (== q `(,x ,y))))
+         '((2 2)))
+  (check "fd 7"
+         (run* (q)
+           (fresh (x y z) (infd x y z '(1 2)) (=/=fd x y) (=/=fd x z) (=/=fd y z))
+           (infd q '(5)))
+         '())
+  (check "fd 8" (run* (q) (fresh (x) (infd x '(1 2))) (infd q '(5))) '(5))
+  (check "fd 9" (run* (q) (== q t)) '(t))
+  (check "fd 10" (run* (q) (infd q '(1 2)) (== q t)) '())
+  (check "fd 11" (run* (q) (== q t) (infd q '(1 2))) '())
+  (check "fd 12"
+         (run* (q) (fresh (x) (<=fd x 5) (infd x q (range 0 10)) (=fd q x)))
+         '(0 1 2 3 4 5))
+  (check "fd 13"
+         (run* (q) (fresh (x y z)
+                     (infd x y z q (range 0 9))
+                     (=/=fd x y) (=/=fd y z) (=/=fd x z)
+                     (=fd x 2) (=fd q 3) (plusfd y 3 z)))
+         '(3))
+  (check "fd 14.0" (run* (q) (distinctfd '(1 2 3 4 5))) '(|_.0|))
+  (check "fd 14.1" (run* (q) (distinctfd '(1 2 3 4 4 5))) '())
+  (check "fd 14.2" (run* (q) (infd q (range 0 2)) (distinctfd `(,q))) '(0 1 2))
+  (check "fd 14.3" (run* (q) (infd q (range 0 2)) (distinctfd `(,q ,q))) '())
+  (check "fd 14.4"
+         (run* (q) (fresh (x y z)
+                     (infd x y z (range 0 2))
+                     (distinctfd `(,x ,y ,z))
+                     (== q `(,x ,y ,z))))
+         '((0 1 2) (0 2 1) (1 0 2) (2 0 1) (1 2 0) (2 1 0)))
+  (check "fd 15"
+         (run* (q) (fresh (a b c x)
+                     (infd a b c (range 1 3))
+                     (distinctfd `(,a ,b ,c))
+                     (=/=fd c x) (<=fd b 2) (== x 3)
+                     (== q `(,a ,b ,c))))
+         '((3 1 2) (3 2 1)))
+  (check "fd 16"
+         (run* (q) (fresh (x y z) (infd x y z '(1 2)) (distinctfd `(,x ,y ,z))))
+         '())
+  (check "fd 17"
+         (run* (q) (fresh (x y) (infd x y (range 0 6)) (timesfd x y 6) (== q `(,x ,y))))
+         '((1 6) (2 3) (3 2) (6 1)))
+  (check "fd 18"
+         (run* (q) (fresh (x y) (infd x y (range 0 6)) (timesfd x 6 y) (== q `(,x ,y))))
+         '((0 0) (1 6)))
+  (check "fd 19"
+         (run* (q) (fresh (x y) (infd x y (range 0 6)) (timesfd 6 x y) (== q `(,x ,y))))
+         '((0 0) (1 6)))
+  (check "fd 20" (run* (q) (infd q (range 0 36)) (timesfd q q 36)) '(6))
+  (check "fd 21"
+         (run* (q) (fresh (x y) (infd x y (range 1 100)) (timesfd x y 0) (== q 5)))
+         '())
+  (check "fd long-addition-step"
+         (run* (q) (fresh (digit1 digit2 carry0 carry1)
+                     (infd carry0 carry1 (range 0 1))
+                     (infd digit1 digit2 (range 0 9))
+                     (add-digitso 4 9 0 carry0 digit1)
+                     (add-digitso 3 8 carry0 carry1 digit2)
+                     (== q `(,carry1 ,digit2 ,digit1))))
+         '((1 2 3)))
+  (check "fd 30" (run* (q) (actual-wortho '(1 2 3) 123)) '(|_.0|))
+  (check "fd 31"
+         (run* (q) (fresh (x y z)
+                     (infd x y z (range 0 9))
+                     (== q `(,x ,y ,z))
+                     (actual-wortho `(,x ,y ,z) 123)))
+         '((1 2 3)))
+  (check "fd 32" (run* (q) (infd q (range 0 999)) (actual-wortho '(1 2 3) q)) '(123))
+  (check "fd 33" (run* (q) (infd q (range 0 9)) (actual-wortho `(5 ,q 3) 543)) '(4))
+  (check "fd 34"
+         (run* (q) (fresh (x)
+                     (infd x (range 0 9))
+                     (infd q (range 0 999))
+                     (actual-wortho `(5 ,x 3) q)))
+         '(503 513 523 533 543 553 563 573 583 593))
+  (check "send more money"
+         (run* (q) (send-more-moneyo q))
+         '((9 5 6 7 1 0 8 2)))
+  (check "send more money (multiplication)"
+         (run* (q) (smm-mult q))
+         '((9 5 6 7 1 0 8 2)))
+  (check "eight queens"
+         (length (run* (q) (n-queenso q 8)))
+         92)
+  ;; comptests.scm: fd beside =/=
+  (check "Distinct Queens 1"
+         (run* (q) (fresh (x) (n-queenso x 8) (fd-distincto x)))
+         '(|_.0|))
+  (check "Distinct Queens 2"
+         (let ((answers (run* (q) (n-queenso q 4))))
+           (run* (q) (fd-distincto answers)))
+         '(|_.0|))
+  (check "infd/Distinct 1"
+         (run* (q) (infd q '(2 3 4)) (fd-distincto `(a 3 ,q)))
+         '(2 4))
+  ;; here only
+  (check "fd beside a recursive binding"
+         (run* (q) (fresh (x n)
+                     (infd n (range 1 3))
+                     (== x `(,n ,x))
+                     (=/=fd n 2)
+                     (== q x)))
+         '((1 (==> |_.0| (1 |_.0|))) (3 (==> |_.0| (3 |_.0|)))))
+  (check "fd without a domain is an error"
+         (handler-case (progn (run* (q) (fresh (x) (<=fd x q) (infd q '(1)))) :answered)
+           (error () :error))
+         :error))
+
 (defun run-hygiene ()
   ;; the macros bind names of their own around the user's goals
   (check "variables named c and f"
@@ -218,6 +456,7 @@ gave, as recorded in expected.sexp."
     (run-cases)
     (run-matche)
     (run-matchee)
+    (run-fd)
     (run-hygiene)
     (run-walk)
     (run-recursive-vars)

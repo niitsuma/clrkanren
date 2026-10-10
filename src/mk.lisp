@@ -190,7 +190,9 @@ is: as a plain variable that may be passed around and called."
       (cons (cons x v) S)))
 (defun s-alist (S) (if (s-hashed? S) (car S) S))
 
-(defun empty-c () (list '() '() (s-empty) '() '() '() '()))
+;; The state is Byrd's (B E S D Y N T) with one store added at the end:
+;; F holds the finite-domain constraints of fd.lisp, cKanren's oc list.
+(defun empty-c () (list '() '() (s-empty) '() '() '() '() '()))
 
 (defun c->B (c) (first c))
 (defun c->E (c) (second c))
@@ -199,6 +201,7 @@ is: as a plain variable that may be passed around and called."
 (defun c->Y (c) (fifth c))
 (defun c->N (c) (sixth c))
 (defun c->T (c) (seventh c))
+(defun c->F (c) (eighth c))
 
 ;;; ------------------------------------------------------------ streams
 
@@ -206,7 +209,8 @@ is: as a plain variable that may be passed around and called."
 (defmacro inc (e) `(lambdaf@ () ,e))
 
 (defmacro lambdag@ ((c &rest fields) &body e)
-  "(lambdag@ (c) e) or (lambdag@ (c B E S) e) or (lambdag@ (c B E S D Y N T) e).
+  "(lambdag@ (c) e) or (lambdag@ (c B E S) e) or (lambdag@ (c B E S D Y N T) e),
+and (lambdag@ (c B E S D Y N T F) e) to reach the fd store as well.
 The Scheme form's ':' after c may be written |:| or left out."
   (let ((fields (if (and fields (string= (symbol-name (first fields)) ":"))
                     (rest fields)
@@ -216,7 +220,7 @@ The Scheme form's ':' after c may be written |:| or left out."
         `(lambda (,c)
            (declare (ignorable ,c))
            (let ,(loop for f in fields
-                       for acc in '(c->B c->E c->S c->D c->Y c->N c->T)
+                       for acc in '(c->B c->E c->S c->D c->Y c->N c->T c->F)
                        collect `(,f (,acc ,c)))
              (declare (ignorable ,@fields))
              ,@e)))))
@@ -357,6 +361,7 @@ The Scheme form's ':' after c may be written |:| or left out."
         `(take_ ,n
                 (lambdaf@ ()
                   (funcall (fresh (,q0) ,g0 ,@gs
+                             (enforce-constraints ,q0)
                              (lambda (,final-c)
                                (choice (funcall (reify ,q0) ,final-c) #'empty-f)))
                            (empty-c)))))))
@@ -575,14 +580,14 @@ The Scheme form's ':' after c may be written |:| or left out."
          (notany #'in-type? N))))
 
 (defun drop-N-b/c-const (c)
-  (destructuring-bind (B E S D Y N TT) c
+  (destructuring-bind (B E S D Y N TT F) c
     (let ((hit (find-if (lambda (n) (not (var? (walk n S)))) N)))
-      (if hit (list B E S D Y (remq1 hit N) TT) c))))
+      (if hit (list B E S D Y (remq1 hit N) TT F) c))))
 
 (defun drop-Y-b/c-const (c)
-  (destructuring-bind (B E S D Y N TT) c
+  (destructuring-bind (B E S D Y N TT F) c
     (let ((hit (find-if (lambda (y) (not (var? (walk y S)))) Y)))
-      (if hit (list B E S D (remq1 hit Y) N TT) c))))
+      (if hit (list B E S D (remq1 hit Y) N TT F) c))))
 
 (defun same-var? (v)
   (lambda (v^) (and (var? v) (var? v^) (eq v v^))))
@@ -597,14 +602,14 @@ The Scheme form's ':' after c may be written |:| or left out."
             return elem)))
 
 (defun drop-N-b/c-dup-var (c)
-  (destructuring-bind (B E S D Y N TT) c
+  (destructuring-bind (B E S D Y N TT F) c
     (let ((hit (funcall (find-dup #'same-var? S) N)))
-      (if hit (list B E S D Y (remq1 hit N) TT) c))))
+      (if hit (list B E S D Y (remq1 hit N) TT F) c))))
 
 (defun drop-Y-b/c-dup-var (c)
-  (destructuring-bind (B E S D Y N TT) c
+  (destructuring-bind (B E S D Y N TT F) c
     (let ((hit (funcall (find-dup #'same-var? S) Y)))
-      (if hit (list B E S D (remq1 hit Y) N TT) c))))
+      (if hit (list B E S D (remq1 hit Y) N TT F) c))))
 
 (defun var-type-mismatch? (S Y N t1^ t2^)
   (cond
@@ -645,18 +650,18 @@ The Scheme form's ':' after c may be written |:| or left out."
     (if (var? u) (tagged? S Y u) (scheme-symbol? u))))
 
 (defun drop-T-b/c-Y-and-N (c)
-  (destructuring-bind (B E S D Y N TT) c
+  (destructuring-bind (B E S D Y N TT F) c
     (let* ((drop-t? (T-term-ununifiable? S Y N))
            (tm (find-if (lambda (tm) (funcall (funcall drop-t? (lhs tm)) (rhs tm))) TT)))
-      (if tm (list B E S D Y N (remq1 tm TT)) c))))
+      (if tm (list B E S D Y N (remq1 tm TT) F) c))))
 
 (defun move-T-to-D-b/c-t2-atom (c)
-  (destructuring-bind (B E S D Y N TT) c
+  (destructuring-bind (B E S D Y N TT F) c
     (or (some (lambda (tm)
                 (let ((t2^ (walk (rhs tm) S)))
                   (if (and (not (untyped-var? S Y N t2^))
                            (not (consp t2^)))
-                      (list B E S (cons (list tm) D) Y N (remq1 tm TT))
+                      (list B E S (cons (list tm) D) Y N (remq1 tm TT) F)
                       nil)))
               TT)
         c)))
@@ -692,9 +697,9 @@ The Scheme form's ':' after c may be written |:| or left out."
         (t nil)))))
 
 (defun drop-from-D-b/c-T (c)
-  (destructuring-bind (B E S D Y N TT) c
+  (destructuring-bind (B E S D Y N TT F) c
     (let ((hit (find-if (lambda (d) (some (T-superfluous-pr? S Y N TT) d)) D)))
-      (if hit (list B E S (remq1 hit D) Y N TT) c))))
+      (if hit (list B E S (remq1 hit D) Y N TT F) c))))
 
 (defun mem-check (u tm S)
   (let ((tm (walk tm S)))
@@ -705,21 +710,21 @@ The Scheme form's ':' after c may be written |:| or left out."
         (term=? u tm S))))
 
 (defun drop-t-b/c-t2-occurs-t1 (c)
-  (destructuring-bind (B E S D Y N TT) c
+  (destructuring-bind (B E S D Y N TT F) c
     (let ((tm (find-if (lambda (tm)
                          (mem-check (walk (rhs tm) S) (walk (lhs tm) S) S))
                        TT)))
-      (if tm (list B E S D Y N (remq1 tm TT)) c))))
+      (if tm (list B E S D Y N (remq1 tm TT) F) c))))
 
 (defun split-t-move-to-d-b/c-pair (c)
-  (destructuring-bind (B E S D Y N TT) c
+  (destructuring-bind (B E S D Y N TT F) c
     (or (some (lambda (tm)
                 (let ((t2^ (walk (rhs tm) S)))
                   (if (consp t2^)
                       (let ((ta (cons (lhs tm) (car t2^)))
                             (td (cons (lhs tm) (cdr t2^))))
                         (list B E S (cons (list tm) D) Y N
-                              (list* ta td (remq1 tm TT))))
+                              (list* ta td (remq1 tm TT)) F))
                       nil)))
               TT)
         c)))
@@ -731,9 +736,9 @@ The Scheme form's ':' after c may be written |:| or left out."
              D)))
 
 (defun drop-D-b/c-Y-or-N (c)
-  (destructuring-bind (B E S D Y N TT) c
+  (destructuring-bind (B E S D Y N TT F) c
     (let ((hit (funcall (find-d-conflict S Y N) D)))
-      (if hit (list B E S (remq1 hit D) Y N TT) c))))
+      (if hit (list B E S (remq1 hit D) Y N TT F) c))))
 
 (defun LOF ()
   (list #'drop-N-b/c-const #'drop-Y-b/c-const #'drop-Y-b/c-dup-var
@@ -758,16 +763,16 @@ The Scheme form's ':' after c may be written |:| or left out."
 ;;; ------------------------------------------------------------ goals
 
 (defun absento (u v)
-  (lambdag@ (c B E S D Y N TT)
+  (lambdag@ (c B E S D Y N TT F)
     (if (mem-check u v S)
         (mzero)
-        (unit (list B E S D Y N (cons (cons u v) TT))))))
+        (unit (list B E S D Y N (cons (cons u v) TT) F)))))
 
 (defun eigen-absento (e* x*)
-  (lambdag@ (c B E S D Y N TT)
+  (lambdag@ (c B E S D Y N TT F)
     (if (eigen-occurs-check e* x* S)
         (mzero)
-        (unit (list B (cons (cons e* x*) E) S D Y N TT)))))
+        (unit (list B (cons (cons e* x*) E) S D Y N TT F)))))
 
 (defun ground-non-<type>? (pred)
   (lambda (u S)
@@ -778,36 +783,40 @@ The Scheme form's ':' after c may be written |:| or left out."
 (defvar ground-non-number? (ground-non-<type>? #'numberp))
 
 (defun symbolo (u)
-  (lambdag@ (c B E S D Y N TT)
+  (lambdag@ (c B E S D Y N TT F)
     (cond
       ((funcall ground-non-symbol? u S) (mzero))
       ((mem-check u N S) (mzero))
-      (t (unit (list B E S D (cons u Y) N TT))))))
+      (t (unit (list B E S D (cons u Y) N TT F))))))
 
 (defun numbero (u)
-  (lambdag@ (c B E S D Y N TT)
+  (lambdag@ (c B E S D Y N TT F)
     (cond
       ((funcall ground-non-number? u S) (mzero))
       ((mem-check u Y S) (mzero))
-      (t (unit (list B E S D Y (cons u N) TT))))))
+      (t (unit (list B E S D Y (cons u N) TT F))))))
 
 (defun =/= (u v)
-  (lambdag@ (c B E S D Y N TT)
+  (lambdag@ (c B E S D Y N TT F)
     (let ((S0 (unify u v S)))
       (if S0
           (let ((pfx (prefix-S S0 S)))
             (if (null pfx)
                 (mzero)
-                (unit (list B E S (cons pfx D) Y N TT))))
+                (unit (list B E S (cons pfx D) Y N TT F))))
           c))))
 
 (defun == (u v)
-  (lambdag@ (c B E S D Y N TT)
+  (lambdag@ (c B E S D Y N TT F)
     (let ((S0 (unify u v S)))
       (cond
         ((null S0) (mzero))
         ((==fail-check B E S0 D Y N TT) (mzero))
-        (t (unit (list B E S0 D Y N TT)))))))
+        ((null F) (unit (list B E S0 D Y N TT F)))
+        ;; wake the fd constraints on the variables just bound (ck.lisp)
+        (t (or (funcall (run-constraints (bound-vars (prefix-S S0 S)) F)
+                        (list B E S0 D Y N TT F))
+               (mzero)))))))
 
 (define-goal-constant succeed (== nil nil))
 (define-goal-constant fail (== nil t))
@@ -920,7 +929,8 @@ The Scheme form's ':' after c may be written |:| or left out."
                   (and u (eq u d)))))
 
 (defun rem-xx-from-d (c)
-  (destructuring-bind (B E S D Y N TT) c
+  (destructuring-bind (B E S D Y N TT F) c
+    (declare (ignore F))
     ;; a prefix may be '(), which Scheme keeps (it is true there); the
     ;; failures are told apart with a marker instead of NIL
     (remove :drop

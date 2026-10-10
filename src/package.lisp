@@ -13,7 +13,7 @@
    ;; streams and goals
    #:mzero #:unit #:choice #:empty-f #:empty-c
    #:case-inf #:lambdag@ #:lambdaf@ #:inc #:bind #:bind* #:mplus #:mplus*
-   #:c->B #:c->E #:c->S #:c->D #:c->Y #:c->N #:c->T
+   #:c->B #:c->E #:c->S #:c->D #:c->Y #:c->N #:c->T #:c->F
    #:fresh #:eigen #:conde #:conda #:condu #:ifa #:ifu #:project #:onceo
    #:run #:run* #:take_
    #:run1 #:run2 #:run3 #:run4 #:run5 #:run6 #:run7 #:run8 #:run9 #:run10
@@ -36,5 +36,8 @@
    #:build-num #:poso #:>1o #:full-addero #:addero #:gen-addero #:pluso #:minuso
    #:*o #:odd-*o #:bound-*o #:=lo #:<lo #:<=lo #:<o #:<=o #:/o #:splito
    #:logo #:exp2 #:repeated-mul #:expo
+   ;; finite domains (cKanren)
+   #:infd #:domfd #:=fd #:=/=fd #:<=fd #:<fd #:plusfd #:timesfd #:distinctfd #:range
+   #:enforce-constraints #:extend-enforce-fns
    ;; pattern matching
    #:matche #:lambdae #:matchee #:___))

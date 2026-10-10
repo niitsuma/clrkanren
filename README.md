@@ -24,6 +24,9 @@ change from Hirotaka Niitsuma's recursive miniKanren:
 > Recursive miniKanren*, Computación y Sistemas 22(4), 2018.
 > https://doi.org/10.13053/cys-22-4-3072
 
+The finite-domain constraints (`infd`, `=fd`, `plusfd`, …) are cKanren's
+`fd.scm`, which scm2cpp keeps beside the recursive core in `vendor/rkanren`.
+
 The cyclic-list relations and the `varo` family come from
 [niitsuma/Racket-miniKanren](https://github.com/niitsuma/Racket-miniKanren/tree/recursive)
 (the `recursive` branch).
@@ -109,6 +112,43 @@ The answers below are written the way Racket prints them. SBCL prints
 ;; => ((() (1 2 3)) ((1) (2 3)) ((1 2) (3)) ((1 2 3) ()))
 ```
 
+## Finite domains
+
+```lisp
+(run* (q)
+  (fresh (x y)
+    (infd x y (range 0 6))           ; x, y in 0..6
+    (timesfd x y 6)
+    (== q `(,x ,y))))
+;; => ((1 6) (2 3) (3 2) (6 1))
+
+(run* (q) (send-more-moneyo q))      ; SEND + MORE = MONEY, see test/tests.lisp
+;; => ((9 5 6 7 1 0 8 2))
+```
+
+`infd`/`domfd`, `=fd`, `=/=fd`, `<=fd`, `<fd`, `plusfd`, `timesfd` and
+`distinctfd` come from cKanren (Alvis, Byrd, Friedman, Kiselyov, Willcock,
+Carter, 2011). A domain is a sorted list of non-negative integers, and
+`(range lb ub)` builds one. The rules are the same as in cKanren:
+
+- Every variable that an fd constraint mentions needs a domain, given by `infd`
+  or by binding it to a number, before the answer is reified. Otherwise
+  `run` signals an error.
+- Domains that are still open at the end are enumerated.
+
+The constraints sit in an eighth field, `F`, of the state (`c->F`). A `==` that
+binds a variable wakes the fd constraints on it. They work with the other
+constraints and with recursive bindings.
+
+The port fixes the places where the Scheme source doesn't run:
+
+- `copy-before-dom` and `drop-before-dom` are used but never defined.
+- `=fd-c` builds its oc with the goal `=fd`.
+- scm2cpp's Racket build never compiled `fd.scm`.
+
+The answers to cKanren's `fdtests.scm` and `comptests.scm` are unchanged,
+including the order of answers.
+
 `matchee` is matche with `___` (where `syntax-rules` would write `...`).
 `(h ___ . tail)` matches a list whose prefix is made of elements that each
 match `h`, followed by a rest that matches `tail`. A `___` can be nested
@@ -158,6 +198,9 @@ Some other points:
 - **Arithmetic** (Kiselyov's binary numerals): `build-num`, `pluso`,
   `minuso`, `*o`, `/o`, `<o`, `<=o`, `logo`, `expo`, …
 - **Matching:** `matche`, `lambdae`, `matchee`.
+- **Finite domains:** `infd`, `domfd`, `=fd`, `=/=fd`, `<=fd`, `<fd`, `plusfd`,
+  `timesfd`, `distinctfd`, `range`, and the framework underneath:
+  `c->F`, `enforce-constraints` and `extend-enforce-fns`.
 
 ## Tests
 
@@ -182,6 +225,8 @@ clrkanren は、自己参照する束縛（`x = (3 x)` など）を occurs check
 scm2cpp の `vendor/mk-recursive/mk.scm`（Byrd の miniKanren に Niitsuma の
 recursive miniKanren の変更を入れたもの）を、定義ごとに一対一で移植しています。
 答えは Racket 版と同じになることを、差分テストで確認しています。
+cKanren の有限領域制約（`infd`、`=fd`、`plusfd`、`timesfd`、`distinctfd` など）も移植済みです。
+cKanren の `fdtests.scm` と `comptests.scm` の答えは、順序も含めて元と同じです。
 
 ## License
 

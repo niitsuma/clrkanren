@@ -9,6 +9,8 @@
   :serial t
   :components ((:file "package")
                (:file "mk")
+               (:file "ck")
+               (:file "fd")
                (:file "relations")
                (:file "matche"))
   :in-order-to ((test-op (test-op "clrkanren/test"))))
